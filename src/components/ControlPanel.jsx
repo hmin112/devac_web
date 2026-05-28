@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 export function ControlPanel({ 
   connected, logs, publishVelocity, setGoalPose, addLog, 
   useMockMap, setUseMockMap, homePose, isSettingInitialPose, 
-  setIsSettingInitialPose, currentMap, setCurrentMap 
+  setIsSettingInitialPose, currentMap, setCurrentMap, executeCommand
 }) {
   const [command, setCommand] = useState('');
   const logEndRef = useRef(null);
@@ -16,16 +16,13 @@ export function ControlPanel({
     e.preventDefault();
     if (!command.trim()) return;
     
-    addLog(`명령 처리 중: "${command}"`, 'info');
-    setTimeout(() => {
-      addLog(`VLA: "${command}" 작업이 할당되었습니다.`, 'success');
-    }, 1000);
+    // Simulate VLA action through executeCommand
+    executeCommand('VLA_ACTION', { text: command });
     setCommand('');
   };
 
   const handleEmergencyStop = () => {
-    publishVelocity(0, 0);
-    addLog('긴급 정지 트리거됨!', 'error');
+    executeCommand('EMERGENCY_STOP');
   };
 
   const goHome = () => {
@@ -34,8 +31,7 @@ export function ControlPanel({
       return;
     }
     
-    setGoalPose(homePose);
-    addLog('기지로 복귀 중...', 'info');
+    executeCommand('RETURN_HOME');
 
     // Trigger simulation if in mock mode via custom event
     if (useMockMap && typeof window !== 'undefined') {
@@ -43,9 +39,18 @@ export function ControlPanel({
     }
   };
 
+  const handleLoadMap = () => {
+    if (currentMap === 'DEVSIGN') {
+      setUseMockMap(true);
+      addLog('DEVSIGN 지도를 로드합니다.', 'success');
+    } else {
+      addLog(`${currentMap} 지도는 현재 준비 중입니다.`, 'warn');
+    }
+  };
+
   const onDragStart = (e) => {
-    e.dataTransfer.setData("application/wave-rover-home", "set-home");
-    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData('application/wave-rover-home', 'set-home');
+    e.dataTransfer.effectAllowed = 'move';
   };
 
   return (
@@ -87,17 +92,18 @@ export function ControlPanel({
             <div className={`w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform ${isSettingInitialPose ? 'bg-orange-500/20' : 'bg-white/5'}`}>
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isSettingInitialPose ? 'text-orange-500' : 'text-white/70'}><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8"></path><path d="M8 12h8"></path></svg>
             </div>
-            <span className={`text-[11px] font-medium ${isSettingInitialPose ? 'text-orange-500' : 'text-white/70'}`}>위치 초기화</span>
+            <span className={`text-[11px] font-medium ${isSettingInitialPose ? 'text-orange-500' : 'text-white/70'}`}>위 치 초기화</span>
           </button>
 
+          {/* Map Load Button */}
           <button 
-            onClick={() => setUseMockMap(!useMockMap)}
-            className={`flex flex-col items-center justify-center gap-2 p-4 border rounded-2xl transition-colors group ${useMockMap ? 'bg-brand-blue/20 border-brand-blue/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+            onClick={handleLoadMap}
+            className={`flex flex-col items-center justify-center gap-2 p-4 border rounded-2xl transition-colors group ${useMockMap && currentMap === 'DEVSIGN' ? 'bg-brand-blue/20 border-brand-blue/50 shadow-[0_0_15px_rgba(0,210,255,0.2)]' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
           >
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform ${useMockMap ? 'bg-brand-blue/20' : 'bg-white/5'}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={useMockMap ? 'text-brand-blue' : 'text-white/70'}><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform ${useMockMap && currentMap === 'DEVSIGN' ? 'bg-brand-blue/20' : 'bg-white/5'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={useMockMap && currentMap === 'DEVSIGN' ? 'text-brand-blue' : 'text-white/70'}><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
             </div>
-            <span className={`text-xs font-medium ${useMockMap ? 'text-brand-blue' : 'text-white/70'}`}>{useMockMap ? '테스트 맵 해제' : '테스트 맵 로드'}</span>
+            <span className={`text-xs font-medium ${useMockMap && currentMap === 'DEVSIGN' ? 'text-brand-blue' : 'text-white/70'}`}>맵 로드</span>
           </button>
 
           <div className="flex flex-col gap-2">
@@ -134,6 +140,7 @@ export function ControlPanel({
                 key={mapName}
                 onClick={() => {
                   setCurrentMap(mapName);
+                  if (mapName !== 'DEVSIGN') setUseMockMap(false);
                   addLog(`지도가 변경되었습니다: ${mapName}`, 'info');
                 }}
                 className={`flex-1 py-2 px-1 text-[10px] font-bold rounded-lg transition-all ${

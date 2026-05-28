@@ -6,7 +6,7 @@ export function useROS() {
   const [connected, setConnected] = useState(false);
   const [logs, setLogs] = useState([]);
   const [systemStats, setSystemStats] = useState({ cpu: 0, gpu: 0, ram: 0, voltage: 12.0, temp: 45 });
-  const [locStatus, setLocStatus] = useState('LOCALIZED'); // 'LOCALIZED', 'UNCERTAIN', 'LOST'
+  const [locStatus, setLocStatus] = useState('LOCALIZED');
 
   const addLog = useCallback((message, type = 'info') => {
     setLogs((prev) => [...prev.slice(-49), { id: Date.now(), message, type, time: new Date().toLocaleTimeString() }]);
@@ -34,15 +34,18 @@ export function useROS() {
 
     setRos(rosInstance);
 
-    const statsInterval = setInterval(() => {
-      setSystemStats(prev => ({
-        cpu: Math.floor(Math.random() * 30) + 20, 
-        gpu: Math.floor(Math.random() * 15) + 5,   
-        ram: Math.floor(Math.random() * 20) + 40,  
-        voltage: (11.8 + Math.random() * 0.4).toFixed(1),
-        temp: Math.floor(Math.random() * 5) + 42
-      }));
-    }, 2000);
+    // Fetch real system stats from the Jetson
+    const statsInterval = setInterval(async () => {
+      try {
+        const response = await fetch('/stats.json');
+        if (response.ok) {
+          const data = await response.json();
+          setSystemStats(data);
+        }
+      } catch (error) {
+        // Fallback or silent error
+      }
+    }, 1000);
 
     return () => {
       rosInstance.close();

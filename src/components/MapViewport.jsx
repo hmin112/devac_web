@@ -1,5 +1,5 @@
 /**
- * MapViewport.jsx - Fixed Syntax Error & Polished UI
+ * MapViewport.jsx - Fixed Map Loading & UI
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Topic } from 'roslib';
@@ -28,19 +28,30 @@ export function MapViewport({
       parsePGM(mockMapUrl).then((data) => {
         const { width, height, resolution, origin } = data.info;
         setMapData(data);
+        // Center the robot if the map is just loaded
         setRobotPose({ 
           x: origin.position.x + (width * resolution) / 2, 
           y: origin.position.y + (height * resolution) / 2, 
           yaw: 0 
         }); 
         setGoal(null); setPath([]);
-      }).catch(console.error);
+      }).catch(err => {
+        console.error("Map load error:", err);
+        if (addLog) addLog("지도 파일을 불러오는 중 오류가 발생했습니다.", "error");
+      });
       return;
     }
+    
+    // Clear map if mockMapUrl becomes null and not connected to ROS
+    if (!connected) {
+      setMapData(null);
+    }
+
     if (!ros || !connected) return;
     const mapTopic = new Topic({ ros, name: '/map', messageType: 'nav_msgs/OccupancyGrid' });
     const poseTopic = new Topic({ ros, name: '/robot_pose', messageType: 'geometry_msgs/Pose' });
     const pathTopic = new Topic({ ros, name: '/plan', messageType: 'nav_msgs/Path' });
+    
     mapTopic.subscribe(setMapData);
     poseTopic.subscribe((message) => {
       const q = message.orientation;
@@ -50,8 +61,9 @@ export function MapViewport({
     pathTopic.subscribe((message) => {
       setPath(message.poses.map(p => ({ x: p.pose.position.x, y: p.pose.position.y })));
     });
+    
     return () => { mapTopic.unsubscribe(); poseTopic.unsubscribe(); pathTopic.unsubscribe(); };
-  }, [ros, connected, mockMapUrl]);
+  }, [ros, connected, mockMapUrl, addLog]);
 
   const startSimulation = useCallback((targetX, targetY) => {
     if (simInterval.current) clearInterval(simInterval.current);
@@ -85,7 +97,13 @@ export function MapViewport({
   }, [startSimulation, localizationProgress]);
 
   const drawMap = useCallback(() => {
-    if (!mapData || !canvasRef.current || !containerRef.current) return;
+    if (!mapData || !canvasRef.current || !containerRef.current) {
+        if (canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
+        return;
+    }
     const canvas = canvasRef.current;
     const container = containerRef.current;
     const ctx = canvas.getContext('2d', { alpha: false });
@@ -112,7 +130,7 @@ export function MapViewport({
         if (data[y * mapW + x] === 0) ctx.rect(x, mapH - 1 - y, 1.1, 1.1);
       }
     }
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'; ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; ctx.fill();
     ctx.beginPath();
     for (let y = 0; y < mapH; y++) {
       for (let x = 0; x < mapW; x++) {
@@ -211,7 +229,7 @@ export function MapViewport({
               </svg>
               <span className="text-xl font-mono font-bold text-white">{localizationProgress}%</span>
             </div>
-            <div className="flex flex-col items-center gap-1"><h4 className="text-sm font-bold text-white tracking-tight">위치 보정 중...</h4><p className="text-[10px] text-white/40 uppercase tracking-widest">명령 일시 제한됨</p></div>
+            <div className="flex flex-col items-center gap-1"><h4 className="text-sm font-bold text-white tracking-tight"> 위치 보정 중...</h4><p className="text-[10px] text-white/40 uppercase tracking-widest">명령 일시 제한됨</p></div>
           </div>
         </div>
       )}
